@@ -455,6 +455,18 @@ database_path = "/path/to/custom.db"
 
 Priority: `RTK_DB_PATH` env var > `config.toml` > default location.
 
+### Excluding Commands from Auto-Rewrite
+
+By default, the hook rewrites all supported commands automatically. To exclude specific commands (e.g., keep raw `curl` output without schema extraction), add to your config:
+
+**Config file** (`~/.config/rtk/config.toml`, macOS: `~/Library/Application Support/rtk/config.toml`):
+```toml
+[hooks]
+exclude_commands = ["curl", "playwright"]
+```
+
+Excluded commands pass through the hook unchanged — no RTK filtering. This survives `rtk init -g` re-runs since the config file is user-owned.
+
 ### Tee: Full Output Recovery
 
 When RTK filters command output, LLM agents lose failure details (stack traces, assertion messages) and may re-run the same command 2-3 times. The **tee** feature saves raw output to a file so the agent can read it without re-executing.
