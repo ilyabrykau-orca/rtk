@@ -3,13 +3,18 @@ use crate::tracking;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
-const TELEMETRY_URL: &str = "https://api.rtk-ai.app/telemetry";
+const TELEMETRY_URL: Option<&str> = option_env!("RTK_TELEMETRY_URL");
 const TELEMETRY_TOKEN: Option<&str> = option_env!("RTK_TELEMETRY_TOKEN");
 const PING_INTERVAL_SECS: u64 = 23 * 3600; // 23 hours
 
 /// Send a telemetry ping if enabled and not already sent today.
 /// Fire-and-forget: errors are silently ignored.
 pub fn maybe_ping() {
+    // No URL compiled in → telemetry disabled
+    if TELEMETRY_URL.is_none() {
+        return;
+    }
+
     // Check opt-out: env var
     if std::env::var("RTK_TELEMETRY_DISABLED").unwrap_or_default() == "1" {
         return;
@@ -42,6 +47,7 @@ pub fn maybe_ping() {
 }
 
 fn send_ping() -> Result<(), Box<dyn std::error::Error>> {
+    let url = TELEMETRY_URL.ok_or("no telemetry URL")?;
     let device_hash = generate_device_hash();
     let version = env!("CARGO_PKG_VERSION").to_string();
     let os = std::env::consts::OS.to_string();
@@ -60,7 +66,7 @@ fn send_ping() -> Result<(), Box<dyn std::error::Error>> {
         "savings_pct": savings_pct,
     });
 
-    let mut req = ureq::post(TELEMETRY_URL).set("Content-Type", "application/json");
+    let mut req = ureq::post(url).set("Content-Type", "application/json");
 
     if let Some(token) = TELEMETRY_TOKEN {
         req = req.set("X-RTK-Token", token);
