@@ -507,6 +507,37 @@ GOEOF
 fi
 
 # ===================
+# rewrite (verify rewrite works with and without quotes)
+# ===================
+section "rewrite"
+
+# bench_rewrite: verifies rewrite produces expected output (not token comparison)
+bench_rewrite() {
+  local name="$1"
+  local cmd="$2"
+  local expected="$3"
+
+  result=$(eval "$cmd" 2>&1 || true)
+
+  TOTAL_TESTS=$((TOTAL_TESTS + 1))
+
+  if [ "$result" = "$expected" ]; then
+    printf "✅ %-24s │ %-40s │ %s\n" "$name" "$cmd" "$result"
+    GOOD_TESTS=$((GOOD_TESTS + 1))
+  else
+    printf "❌ %-24s │ %-40s │ got: %s (expected: %s)\n" "$name" "$cmd" "$result" "$expected"
+    FAIL_TESTS=$((FAIL_TESTS + 1))
+  fi
+}
+
+bench_rewrite "rewrite quoted"       "$RTK rewrite 'git status'"     "rtk git status"
+bench_rewrite "rewrite unquoted"     "$RTK rewrite git status"       "rtk git status"
+bench_rewrite "rewrite ls -al"       "$RTK rewrite ls -al"           "rtk ls -al"
+bench_rewrite "rewrite npm exec"     "$RTK rewrite npm exec"         "rtk npm exec"
+bench_rewrite "rewrite cargo test"   "$RTK rewrite cargo test"       "rtk cargo test"
+bench_rewrite "rewrite compound"     "$RTK rewrite 'cargo test && git push'" "rtk cargo test && rtk git push"
+
+# ===================
 # Résumé global
 # ===================
 echo ""

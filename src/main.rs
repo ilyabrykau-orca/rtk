@@ -627,7 +627,9 @@ enum Commands {
     ///   REWRITTEN=$(rtk rewrite "$CMD") || exit 0
     Rewrite {
         /// Raw command to rewrite (e.g. "git status", "cargo test && git push")
-        cmd: String,
+        /// Accepts multiple args: `rtk rewrite ls -al` is equivalent to `rtk rewrite "ls -al"`
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
 }
 
@@ -1867,7 +1869,8 @@ fn main() -> Result<()> {
             hook_audit_cmd::run(since, cli.verbose)?;
         }
 
-        Commands::Rewrite { cmd } => {
+        Commands::Rewrite { args } => {
+            let cmd = args.join(" ");
             rewrite_cmd::run(&cmd)?;
         }
 
