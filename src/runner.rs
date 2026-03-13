@@ -59,6 +59,9 @@ pub fn run_err(command: &str, verbose: u8) -> Result<()> {
         println!("{}", rtk);
     }
     timer.track(command, "rtk run-err", &raw, &rtk);
+    if exit_code != 0 {
+        std::process::exit(exit_code);
+    }
     Ok(())
 }
 
@@ -100,6 +103,9 @@ pub fn run_test(command: &str, verbose: u8) -> Result<()> {
         println!("{}", summary);
     }
     timer.track(command, "rtk run-test", &raw, &summary);
+    if exit_code != 0 {
+        std::process::exit(exit_code);
+    }
     Ok(())
 }
 
@@ -267,5 +273,36 @@ mod tests {
         let filtered = filter_errors(output);
         assert!(filtered.contains("error"));
         assert!(!filtered.contains("info"));
+    }
+
+    #[test]
+    #[ignore]
+    fn test_err_forwards_exit_code_nonzero() {
+        // Requires rtk to be installed on PATH (cargo install --path .)
+        let output = std::process::Command::new("rtk")
+            .args(["err", "sh", "-c", "exit 2"])
+            .output()
+            .expect("failed to run rtk — install with: cargo install --path .");
+        assert_eq!(output.status.code(), Some(2));
+    }
+
+    #[test]
+    #[ignore]
+    fn test_err_forwards_exit_code_zero() {
+        let output = std::process::Command::new("rtk")
+            .args(["err", "sh", "-c", "exit 0"])
+            .output()
+            .expect("failed to run rtk — install with: cargo install --path .");
+        assert_eq!(output.status.code(), Some(0));
+    }
+
+    #[test]
+    #[ignore]
+    fn test_test_forwards_exit_code_nonzero() {
+        let output = std::process::Command::new("rtk")
+            .args(["test", "sh", "-c", "exit 1"])
+            .output()
+            .expect("failed to run rtk — install with: cargo install --path .");
+        assert_eq!(output.status.code(), Some(1));
     }
 }

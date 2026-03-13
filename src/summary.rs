@@ -31,9 +31,16 @@ pub fn run(command: &str, verbose: u8) -> Result<()> {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let raw = format!("{}\n{}", stdout, stderr);
 
+    let exit_code = output
+        .status
+        .code()
+        .unwrap_or(if output.status.success() { 0 } else { 1 });
     let summary = summarize_output(&raw, command, output.status.success());
     println!("{}", summary);
     timer.track(command, "rtk summary", &raw, &summary);
+    if exit_code != 0 {
+        std::process::exit(exit_code);
+    }
     Ok(())
 }
 
