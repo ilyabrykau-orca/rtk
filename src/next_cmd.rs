@@ -146,7 +146,7 @@ fn filter_next_build(output: &str) -> String {
         for (route, size, pct_change) in bundles.iter().take(10) {
             let warning_marker = if let Some(pct) = pct_change {
                 if *pct > 10.0 {
-                    format!(" ⚠️ (+{:.0}%)", pct)
+                    format!(" [warn] (+{:.0}%)", pct)
                 } else {
                     String::new()
                 }

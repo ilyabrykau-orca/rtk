@@ -368,8 +368,8 @@ fn view_pr(args: &[String], _verbose: u8, ultra_compact: bool) -> Result<()> {
     print!("{}", line);
 
     let mergeable_str = match mergeable {
-        "MERGEABLE" => "✓",
-        "CONFLICTING" => "✗",
+        "MERGEABLE" => "[ok]",
+        "CONFLICTING" => "[x]",
         _ => "?",
     };
     let line = format!("  {} | {}\n", state, mergeable_str);
@@ -417,7 +417,7 @@ fn view_pr(args: &[String], _verbose: u8, ultra_compact: bool) -> Result<()> {
 
         if ultra_compact {
             if failed > 0 {
-                let line = format!("  ✗{}/{}  {} fail\n", passed, total, failed);
+                let line = format!("  [x]{}/{}  {} fail\n", passed, total, failed);
                 filtered.push_str(&line);
                 print!("{}", line);
             } else {
@@ -430,7 +430,7 @@ fn view_pr(args: &[String], _verbose: u8, ultra_compact: bool) -> Result<()> {
             filtered.push_str(&line);
             print!("{}", line);
             if failed > 0 {
-                let line = format!("  ⚠️  {} checks failed\n", failed);
+                let line = format!("  [warn] {} checks failed\n", failed);
                 filtered.push_str(&line);
                 print!("{}", line);
             }
@@ -504,9 +504,9 @@ fn pr_checks(args: &[String], _verbose: u8, _ultra_compact: bool) -> Result<()> 
     let mut failed_checks = Vec::new();
 
     for line in stdout.lines() {
-        if line.contains('✓') || line.contains("pass") {
+        if line.contains("[ok]") || line.contains("pass") {
             passed += 1;
-        } else if line.contains('✗') || line.contains("fail") {
+        } else if line.contains("[x]") || line.contains("fail") {
             failed += 1;
             failed_checks.push(line.trim().to_string());
         } else if line.contains('*') || line.contains("pending") {
@@ -520,16 +520,16 @@ fn pr_checks(args: &[String], _verbose: u8, _ultra_compact: bool) -> Result<()> 
     filtered.push_str(line);
     print!("{}", line);
 
-    let line = format!("  ✅ Passed: {}\n", passed);
+    let line = format!("  [ok] Passed: {}\n", passed);
     filtered.push_str(&line);
     print!("{}", line);
 
-    let line = format!("  ❌ Failed: {}\n", failed);
+    let line = format!("  [FAIL] Failed: {}\n", failed);
     filtered.push_str(&line);
     print!("{}", line);
 
     if pending > 0 {
-        let line = format!("  ⏳ Pending: {}\n", pending);
+        let line = format!("  [pending] Pending: {}\n", pending);
         filtered.push_str(&line);
         print!("{}", line);
     }
@@ -824,8 +824,8 @@ fn list_runs(args: &[String], _verbose: u8, ultra_compact: bool) -> Result<()> {
 
             let icon = if ultra_compact {
                 match conclusion {
-                    "success" => "✓",
-                    "failure" => "✗",
+                    "success" => "[ok]",
+                    "failure" => "[x]",
                     "cancelled" => "X",
                     _ => {
                         if status == "in_progress" {
@@ -837,12 +837,12 @@ fn list_runs(args: &[String], _verbose: u8, ultra_compact: bool) -> Result<()> {
                 }
             } else {
                 match conclusion {
-                    "success" => "✅",
-                    "failure" => "❌",
-                    "cancelled" => "🚫",
+                    "success" => "[ok]",
+                    "failure" => "[FAIL]",
+                    "cancelled" => "[X]",
                     _ => {
                         if status == "in_progress" {
-                            "⏳"
+                            "[time]"
                         } else {
                             "⚪"
                         }
@@ -923,8 +923,8 @@ fn view_run(args: &[String], _verbose: u8) -> Result<()> {
                 // Skip successful jobs in compact mode
                 continue;
             }
-            if line.contains('✗') || line.contains("fail") {
-                let formatted = format!("  ❌ {}\n", line.trim());
+            if line.contains("[x]") || line.contains("fail") {
+                let formatted = format!("  [FAIL] {}\n", line.trim());
                 filtered.push_str(&formatted);
                 print!("{}", formatted);
             }
@@ -991,11 +991,7 @@ fn run_repo(args: &[String], _verbose: u8, _ultra_compact: bool) -> Result<()> {
     let forks = json["forkCount"].as_i64().unwrap_or(0);
     let private = json["isPrivate"].as_bool().unwrap_or(false);
 
-    let visibility = if private {
-        "🔒 Private"
-    } else {
-        "🌐 Public"
-    };
+    let visibility = if private { "[private]" } else { "[public]" };
 
     let mut filtered = String::new();
 

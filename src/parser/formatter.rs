@@ -105,7 +105,7 @@ impl TokenFormatter for TestResult {
 
     fn format_ultra(&self) -> String {
         format!(
-            "✓{} ✗{} ⊘{} ({}ms)",
+            "[ok]{} [x]{} [skip]{} ({}ms)",
             self.passed,
             self.failed,
             self.skipped,
@@ -161,9 +161,9 @@ impl TokenFormatter for LintResult {
             lines.push("\nIssues:".to_string());
             for issue in self.issues.iter().take(20) {
                 let severity_symbol = match issue.severity {
-                    LintSeverity::Error => "✗",
-                    LintSeverity::Warning => "⚠",
-                    LintSeverity::Info => "ℹ",
+                    LintSeverity::Error => "[x]",
+                    LintSeverity::Warning => "[!]",
+                    LintSeverity::Info => "[info]",
                 };
                 lines.push(format!(
                     "{} {}:{}:{} [{}] {}",
@@ -186,7 +186,7 @@ impl TokenFormatter for LintResult {
 
     fn format_ultra(&self) -> String {
         format!(
-            "✗{} ⚠{} {}F",
+            "[x]{} [!]{} {}F",
             self.errors, self.warnings, self.files_with_issues
         )
     }
@@ -257,7 +257,7 @@ impl TokenFormatter for DependencyState {
 
 impl TokenFormatter for BuildOutput {
     fn format_compact(&self) -> String {
-        let status = if self.success { "✓" } else { "✗" };
+        let status = if self.success { "[ok]" } else { "[x]" };
         let mut lines = vec![format!(
             "{} Build: {} errors, {} warnings",
             status, self.errors, self.warnings
@@ -324,9 +324,9 @@ impl TokenFormatter for BuildOutput {
     }
 
     fn format_ultra(&self) -> String {
-        let status = if self.success { "✓" } else { "✗" };
+        let status = if self.success { "[ok]" } else { "[x]" };
         format!(
-            "{} ✗{} ⚠{} ({}ms)",
+            "{} [x]{} [!]{} ({}ms)",
             status,
             self.errors,
             self.warnings,

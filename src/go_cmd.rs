@@ -399,7 +399,7 @@ fn filter_go_test_json(output: &str) -> String {
         ));
 
         for (test, outputs) in &pkg_result.failed_tests {
-            result.push_str(&format!("  ❌ {}\n", test));
+            result.push_str(&format!("  [FAIL] {}\n", test));
 
             // Show failure output (limit to key lines)
             let relevant_lines: Vec<&String> = outputs

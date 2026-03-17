@@ -198,13 +198,13 @@ fn build_pytest_summary(summary: &str, _test_files: &[String], failures: &[Strin
             if first_line.starts_with("___") {
                 // Extract test name between ___
                 let test_name = first_line.trim_matches('_').trim();
-                result.push_str(&format!("{}. ❌ {}\n", i + 1, test_name));
+                result.push_str(&format!("{}. [FAIL] {}\n", i + 1, test_name));
             } else if first_line.starts_with("FAILED") {
                 // Summary format: "FAILED tests/test_foo.py::test_bar - AssertionError"
                 let parts: Vec<&str> = first_line.split(" - ").collect();
                 if let Some(test_path) = parts.first() {
                     let test_name = test_path.trim_start_matches("FAILED ");
-                    result.push_str(&format!("{}. ❌ {}\n", i + 1, test_name));
+                    result.push_str(&format!("{}. [FAIL] {}\n", i + 1, test_name));
                 }
                 if parts.len() > 1 {
                     result.push_str(&format!("     {}\n", truncate(parts[1], 100)));

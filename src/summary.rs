@@ -42,7 +42,7 @@ fn summarize_output(output: &str, command: &str, success: bool) -> String {
     let mut result = Vec::new();
 
     // Status
-    let status_icon = if success { "✅" } else { "❌" };
+    let status_icon = if success { "[ok]" } else { "[FAIL]" };
     result.push(format!(
         "{} Command: {}",
         status_icon,
@@ -126,7 +126,7 @@ fn summarize_tests(output: &str, result: &mut Vec<String>) {
                 passed += 1;
             }
         }
-        if lower.contains("failed") || lower.contains("✗") || lower.contains("fail") {
+        if lower.contains("failed") || lower.contains("[x]") || lower.contains("fail") {
             if let Some(n) = extract_number(&lower, "failed") {
                 failed = n;
             }
@@ -142,9 +142,9 @@ fn summarize_tests(output: &str, result: &mut Vec<String>) {
         }
     }
 
-    result.push(format!("   ✅ {} passed", passed));
+    result.push(format!("   [ok] {} passed", passed));
     if failed > 0 {
-        result.push(format!("   ❌ {} failed", failed));
+        result.push(format!("   [FAIL] {} failed", failed));
     }
     if skipped > 0 {
         result.push(format!("   skip {} skipped", skipped));
@@ -187,13 +187,13 @@ fn summarize_build(output: &str, result: &mut Vec<String>) {
         result.push(format!("   {} crates/files compiled", compiled));
     }
     if errors > 0 {
-        result.push(format!("   ❌ {} errors", errors));
+        result.push(format!("   [error] {} errors", errors));
     }
     if warnings > 0 {
-        result.push(format!("   ⚠️  {} warnings", warnings));
+        result.push(format!("   [warn] {} warnings", warnings));
     }
     if errors == 0 && warnings == 0 {
-        result.push("   ✅ Build successful".to_string());
+        result.push("   [ok] Build successful".to_string());
     }
 
     if !error_msgs.is_empty() {
@@ -223,9 +223,9 @@ fn summarize_logs_quick(output: &str, result: &mut Vec<String>) {
         }
     }
 
-    result.push(format!("   ❌ {} errors", errors));
-    result.push(format!("   ⚠️  {} warnings", warnings));
-    result.push(format!("   ℹ️  {} info", info));
+    result.push(format!("   [error] {} errors", errors));
+    result.push(format!("   [warn] {} warnings", warnings));
+    result.push(format!("   [info] {} info", info));
 }
 
 fn summarize_list(output: &str, result: &mut Vec<String>) {

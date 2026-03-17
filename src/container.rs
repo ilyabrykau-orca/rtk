@@ -146,7 +146,11 @@ fn docker_images(_verbose: u8) -> Result<()> {
     } else {
         format!("{:.0}MB", total_size_mb)
     };
-    rtk.push_str(&format!("[docker] {} images ({})\n", lines.len(), total_display));
+    rtk.push_str(&format!(
+        "[docker] {} images ({})\n",
+        lines.len(),
+        total_display
+    ));
 
     for line in lines.iter().take(15) {
         let parts: Vec<&str> = line.split('\t').collect();
@@ -298,7 +302,7 @@ fn kubectl_pods(args: &[String], _verbose: u8) -> Result<()> {
         parts.push(format!("{} pending", pending));
     }
     if failed > 0 {
-        parts.push(format!("{} ✗", failed));
+        parts.push(format!("{} [x]", failed));
     }
     if restarts_total > 0 {
         parts.push(format!("{} restarts", restarts_total));
@@ -855,10 +859,7 @@ web-1  | 192.168.1.1 - GET /favicon.ico 404
 api-1  | Server listening on port 3000
 api-1  | Connected to database";
         let out = format_compose_logs(raw);
-        assert!(
-            out.contains("Logs"),
-            "should have compose logs header"
-        );
+        assert!(out.contains("Logs"), "should have compose logs header");
     }
 
     #[test]

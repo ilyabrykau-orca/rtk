@@ -362,7 +362,7 @@ fn filter_migrate_deploy(output: &str) -> String {
     if errors.is_empty() {
         result.push_str(&format!("✓ {} migration(s) deployed\n", deployed));
     } else {
-        result.push_str("❌ Deployment failed:\n");
+        result.push_str("[FAIL] Deployment failed:\n");
         for err in errors.iter().take(5) {
             result.push_str(&format!("  {}\n", err));
         }

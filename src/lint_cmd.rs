@@ -172,7 +172,7 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
     // Check if process was killed by signal (SIGABRT, SIGKILL, etc.)
     if !output.status.success() && output.status.code().is_none() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        eprintln!("⚠️  Linter process terminated abnormally (possibly out of memory)");
+        eprintln!("[warn] Linter process terminated abnormally (possibly out of memory)");
         if !stderr.is_empty() {
             eprintln!(
                 "stderr: {}",

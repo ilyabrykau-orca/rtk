@@ -250,7 +250,7 @@ fn merge_weekly(cc: Option<Vec<CcusagePeriod>>, rtk: Vec<WeekStats>) -> Vec<Peri
         let monday_key = match convert_saturday_to_monday(&entry.week_start) {
             Some(m) => m,
             None => {
-                eprintln!("⚠️  Invalid week_start format: {}", entry.week_start);
+                eprintln!("[warn] Invalid week_start format: {}", entry.week_start);
                 continue;
             }
         };
@@ -442,7 +442,7 @@ fn display_summary(tracker: &Tracker, verbose: u8) -> Result<()> {
 
     let totals = compute_totals(&periods);
 
-    println!("💰 Claude Code Economics");
+    println!("[cost] Claude Code Economics");
     println!("════════════════════════════════════════════════════");
     println!();
 

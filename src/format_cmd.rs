@@ -264,7 +264,7 @@ fn filter_black_output(output: &str) -> String {
             ));
         }
 
-        result.push_str("\n💡 Run `black .` to format these files\n");
+        result.push_str("\n[hint] Run `black .` to format these files\n");
     } else {
         // Fallback: show raw output
         result.push_str(output.trim());
