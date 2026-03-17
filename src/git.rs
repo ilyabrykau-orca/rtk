@@ -115,6 +115,21 @@ fn run_diff(
     let output = cmd.output().context("Failed to run git diff")?;
     let stat_stdout = String::from_utf8_lossy(&output.stdout);
 
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stderr.trim().is_empty() {
+            eprint!("{}", stderr);
+        }
+        let raw = stat_stdout.to_string();
+        timer.track(
+            &format!("git diff {}", args.join(" ")),
+            &format!("rtk git diff {}", args.join(" ")),
+            &raw,
+            &raw,
+        );
+        std::process::exit(output.status.code().unwrap_or(1));
+    }
+
     if verbose > 0 {
         eprintln!("Git diff summary:");
     }
@@ -704,6 +719,20 @@ fn run_status(args: &[String], verbose: u8, global_args: &[String]) -> Result<()
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
 
+        if !output.status.success() {
+            if !stderr.trim().is_empty() {
+                eprint!("{}", stderr);
+            }
+            let raw = stdout.to_string();
+            timer.track(
+                &format!("git status {}", args.join(" ")),
+                &format!("rtk git status {}", args.join(" ")),
+                &raw,
+                &raw,
+            );
+            std::process::exit(output.status.code().unwrap_or(1));
+        }
+
         if verbose > 0 || !stderr.is_empty() {
             eprint!("{}", stderr);
         }
@@ -883,13 +912,14 @@ fn run_commit(args: &[String], verbose: u8, global_args: &[String]) -> Result<()
                 "ok (nothing to commit)",
             );
         } else {
-            eprintln!("FAILED: git commit");
             if !stderr.trim().is_empty() {
-                eprintln!("{}", stderr);
+                eprint!("{}", stderr);
             }
             if !stdout.trim().is_empty() {
-                eprintln!("{}", stdout);
+                eprint!("{}", stdout);
             }
+            timer.track(&original_cmd, "rtk git commit", &raw_output, &raw_output);
+            std::process::exit(output.status.code().unwrap_or(1));
         }
     }
 
@@ -1177,6 +1207,20 @@ fn run_branch(args: &[String], verbose: u8, global_args: &[String]) -> Result<()
     let output = cmd.output().context("Failed to run git branch")?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let raw = stdout.to_string();
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stderr.trim().is_empty() {
+            eprint!("{}", stderr);
+        }
+        timer.track(
+            &format!("git branch {}", args.join(" ")),
+            &format!("rtk git branch {}", args.join(" ")),
+            &raw,
+            &raw,
+        );
+        std::process::exit(output.status.code().unwrap_or(1));
+    }
 
     let filtered = filter_branch_output(&stdout);
     println!("{}", filtered);
