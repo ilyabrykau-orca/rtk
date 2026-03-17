@@ -125,7 +125,7 @@ fn filter_next_build(output: &str) -> String {
 
     // Build filtered output
     let mut result = String::new();
-    result.push_str("⚡ Next.js Build\n");
+    result.push_str("Next.js Build\n");
     result.push_str("═══════════════════════════════════════\n");
 
     if already_built && routes_total == 0 {
@@ -219,7 +219,7 @@ Route (app)                    Size     First Load JS
 ✓ Built in 34.2s
 "#;
         let result = filter_next_build(output);
-        assert!(result.contains("⚡ Next.js Build"));
+        assert!(result.contains("Next.js Build"));
         assert!(result.contains("routes"));
         assert!(!result.contains("Creating an optimized")); // Should filter verbose logs
     }
