@@ -206,7 +206,8 @@ pub(crate) fn extract_bash_pattern(rule: &str) -> &str {
 /// - `pattern` → exact match or prefix match (cmd must equal pattern or start with `{pattern} `)
 pub(crate) fn command_matches_pattern(cmd: &str, pattern: &str) -> bool {
     // 1. Global wildcard
-    if pattern == "*" {
+    // ".*" comes from Claude Code's Bash(.*) permission — treat as catch-all.
+    if pattern == "*" || pattern == ".*" {
         return true;
     }
 
@@ -702,6 +703,28 @@ mod tests {
         assert_eq!(
             check_command_with_rules("git status && git push origin main", &[], &ask, &allow),
             PermissionVerdict::Ask
+        );
+    }
+
+    // Bug: Bash(.*) extracts ".*" which should match everything (regex-style catch-all)
+    #[test]
+    fn test_dot_star_matches_everything() {
+        assert!(command_matches_pattern("git status", ".*"));
+        assert!(command_matches_pattern("cargo build --release", ".*"));
+        assert!(command_matches_pattern("rm -rf /", ".*"));
+        assert!(command_matches_pattern("", ".*"));
+    }
+
+    #[test]
+    fn test_dot_star_allow_verdict() {
+        let allow = vec![".*".to_string()];
+        assert_eq!(
+            check_command_with_rules("git status", &[], &[], &allow),
+            PermissionVerdict::Allow
+        );
+        assert_eq!(
+            check_command_with_rules("cargo test && git push", &[], &[], &allow),
+            PermissionVerdict::Allow
         );
     }
 }

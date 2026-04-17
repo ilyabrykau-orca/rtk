@@ -1141,8 +1141,11 @@ fn categorize_command(rtk_cmd: &str) -> String {
         "cargo" => "cargo",
         "npm" | "npx" | "pnpm" | "vitest" | "tsc" | "lint" | "prettier" | "next" | "playwright"
         | "prisma" => "js",
-        "pytest" | "ruff" | "mypy" | "pip" => "python",
-        "go" | "golangci-lint" => "go",
+        "pytest" | "ruff" | "mypy" | "pip" | "black" | "flake8" | "pylint" | "pyright"
+        | "isort" | "bandit" | "coverage" | "tox" | "nox" | "pip-compile" | "pip-sync"
+        | "python" | "poetry" => "python",
+        "go" | "golangci-lint" | "staticcheck" | "govulncheck" | "gofumpt" | "goimports"
+        | "gotestsum" | "revive" => "go",
         "docker" | "kubectl" => "cloud",
         "rspec" | "rubocop" | "rake" => "ruby",
         "dotnet" => "dotnet",

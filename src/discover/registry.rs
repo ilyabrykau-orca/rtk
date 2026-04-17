@@ -128,7 +128,7 @@ pub fn classify_command(cmd: &str) -> Classification {
         let has_redirect = cmd_clean
             .split_whitespace()
             .skip(1)
-            .any(|t| t.starts_with('>') || t == "<" || t.starts_with(">>"));
+            .any(|t| t.starts_with('>') || t == "<" || t.starts_with(">>") || t.starts_with("<<"));
         if has_redirect {
             return Classification::Unsupported {
                 base_command: cmd_clean
@@ -3372,6 +3372,108 @@ mod tests {
         assert_eq!(
             rewrite_command("git log | head | tail && git status", &[]),
             Some("rtk git log | head | tail && rtk git status".into())
+        );
+    }
+
+    #[test]
+    fn test_cat_heredoc_classified_correctly() {
+        let result = classify_command("cat << 'EOF'");
+        assert!(
+            matches!(result, Classification::Unsupported { .. }),
+            "cat heredoc should be Unsupported, got {:?}",
+            result
+        );
+        let result = classify_command("cat <<EOF");
+        assert!(
+            matches!(result, Classification::Unsupported { .. }),
+            "cat <<EOF should be Unsupported, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_cat_read_still_supported() {
+        assert!(matches!(
+            classify_command("cat file.txt"),
+            Classification::Supported {
+                rtk_equivalent: "rtk read",
+                ..
+            }
+        ));
+    }
+
+    // --- bun test / run / passthrough routing ---
+
+    #[test]
+    fn test_classify_bun_test() {
+        assert_eq!(
+            classify_command("bun test"),
+            Classification::Supported {
+                rtk_equivalent: "rtk bun test",
+                category: "Tests",
+                estimated_savings_pct: 90.0,
+                status: RtkStatus::Existing,
+            }
+        );
+        assert_eq!(
+            classify_command("bun test src/foo.test.ts"),
+            Classification::Supported {
+                rtk_equivalent: "rtk bun test",
+                category: "Tests",
+                estimated_savings_pct: 90.0,
+                status: RtkStatus::Existing,
+            }
+        );
+    }
+
+    #[test]
+    fn test_classify_bun_run() {
+        assert_eq!(
+            classify_command("bun run build"),
+            Classification::Supported {
+                rtk_equivalent: "rtk bun run",
+                category: "PackageManager",
+                estimated_savings_pct: 70.0,
+                status: RtkStatus::Existing,
+            }
+        );
+    }
+
+    #[test]
+    fn test_classify_bun_install_passthrough() {
+        if let Classification::Supported { status, .. } = classify_command("bun install") {
+            assert_eq!(status, RtkStatus::Passthrough);
+        } else {
+            panic!("bun install should be Supported");
+        }
+    }
+
+    #[test]
+    fn test_rewrite_bun_test() {
+        assert_eq!(
+            rewrite_command("bun test", &[]),
+            Some("rtk bun test".into()),
+        );
+        assert_eq!(
+            rewrite_command("bun test src/foo.test.ts", &[]),
+            Some("rtk bun test src/foo.test.ts".into()),
+        );
+    }
+
+    #[test]
+    fn test_rewrite_bun_run() {
+        assert_eq!(
+            rewrite_command("bun run build", &[]),
+            Some("rtk bun run build".into()),
+        );
+    }
+
+    #[test]
+    fn test_rewrite_bunx() {
+        // bunx prettier is captured by the prettier rule (last-match-wins), so use a generic tool
+        assert_eq!(
+            rewrite_command("bunx svgo --input file.svg", &[]),
+            Some("rtk bunx svgo --input file.svg".into()),
         );
     }
 }

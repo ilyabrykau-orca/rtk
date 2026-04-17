@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="3" assertions="3" failures="2" skipped="0" time="0.006287">
+  <testsuite name="fail.test.ts" file="fail.test.ts" tests="3" assertions="3" failures="2" skipped="0" time="0" hostname="PO-RND-M-ILYBRY">
+    <testcase name="passes" classname="" time="0" file="fail.test.ts" line="2" assertions="1" />
+    <testcase name="fails - wrong value" classname="" time="0.000664" file="fail.test.ts" line="3" assertions="1">
+      <failure type="AssertionError" />
+    </testcase>
+    <testcase name="fails - type error" classname="" time="0.000141" file="fail.test.ts" line="4" assertions="1">
+      <failure type="AssertionError" />
+    </testcase>
+  </testsuite>
+</testsuites>

@@ -1,0 +1,31 @@
+bun test v1.3.12 (700fc117)
+
+fail.test.ts:
+1 | import { test, expect } from "bun:test";
+2 | test("passes", () => { expect(1).toBe(1); });
+3 | test("fails - wrong value", () => { expect(42).toBe(99); });
+                                                   ^
+error: expect(received).toBe(expected)
+
+Expected: 99
+Received: 42
+
+      at <anonymous> (/private/tmp/rtk-bun-fixtures/fail.test.ts:3:48)
+(fail) fails - wrong value [1.98ms]
+1 | import { test, expect } from "bun:test";
+2 | test("passes", () => { expect(1).toBe(1); });
+3 | test("fails - wrong value", () => { expect(42).toBe(99); });
+4 | test("fails - type error", () => { expect("hello").toBe(5); });
+                                                       ^
+error: expect(received).toBe(expected)
+
+Expected: 5
+Received: "hello"
+
+      at <anonymous> (/private/tmp/rtk-bun-fixtures/fail.test.ts:4:52)
+(fail) fails - type error [0.14ms]
+
+ 1 pass
+ 2 fail
+ 3 expect() calls
+Ran 3 tests across 1 file. [8.00ms]

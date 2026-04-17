@@ -12,8 +12,8 @@ use cmds::dotnet::{binlog, dotnet_cmd, dotnet_format_report, dotnet_trx};
 use cmds::git::{diff_cmd, gh_cmd, git, gt_cmd};
 use cmds::go::{go_cmd, golangci_cmd};
 use cmds::js::{
-    lint_cmd, next_cmd, npm_cmd, playwright_cmd, pnpm_cmd, prettier_cmd, prisma_cmd, tsc_cmd,
-    vitest_cmd,
+    bun_run_cmd, bun_test_cmd, lint_cmd, next_cmd, npm_cmd, playwright_cmd, pnpm_cmd, prettier_cmd,
+    prisma_cmd, tsc_cmd, vitest_cmd,
 };
 use cmds::python::{mypy_cmd, pip_cmd, pytest_cmd, ruff_cmd};
 use cmds::ruby::{rake_cmd, rspec_cmd, rubocop_cmd};
@@ -450,6 +450,18 @@ enum Commands {
     /// Vitest commands with compact output
     Vitest {
         /// Additional vitest arguments
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    /// Bun commands with compact output
+    Bun {
+        #[command(subcommand)]
+        command: BunCommands,
+    },
+
+    /// bunx with filtered output (alias for bun x)
+    Bunx {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
@@ -1258,6 +1270,23 @@ enum GtCommands {
     Other(Vec<OsString>),
 }
 
+#[derive(Debug, Subcommand)]
+enum BunCommands {
+    /// Bun test runner with compact output
+    Test {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Bun run with filtered output
+    Run {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Other bun subcommands (passthrough)
+    #[command(external_subcommand)]
+    Other(Vec<OsString>),
+}
+
 /// Split a string into shell-like tokens, respecting single and double quotes.
 /// e.g. `git log --format="%H %s"` → ["git", "log", "--format=%H %s"]
 fn shell_split(input: &str) -> Vec<String> {
@@ -1848,6 +1877,30 @@ fn run_cli() -> Result<i32> {
             vitest_cmd::run_test(&cli.command, args, cli.verbose)?
         }
 
+        Commands::Bun { command } => match command {
+            BunCommands::Test { args } => bun_test_cmd::run(&args, cli.verbose)?,
+            BunCommands::Run { args } => bun_run_cmd::run(&args, cli.verbose)?,
+            BunCommands::Other(args) => {
+                let timer = core::tracking::TimedExecution::start();
+                let mut cmd = core::utils::resolved_command("bun");
+                for arg in &args {
+                    cmd.arg(arg);
+                }
+                let status = cmd.status().context("Failed to run bun")?;
+                let args_str: Vec<String> = args
+                    .iter()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .collect();
+                timer.track_passthrough(
+                    &format!("bun {}", args_str.join(" ")),
+                    &format!("rtk bun {} (passthrough)", args_str.join(" ")),
+                );
+                core::utils::exit_code_from_status(&status, "bun")
+            }
+        },
+
+        Commands::Bunx { args } => bun_run_cmd::run(&args, cli.verbose)?,
+
         Commands::Prisma { command } => match command {
             PrismaCommands::Generate { args } => {
                 prisma_cmd::run(prisma_cmd::PrismaCommand::Generate, &args, cli.verbose)?
@@ -2385,6 +2438,8 @@ fn is_operational_command(cmd: &Commands) -> bool {
             | Commands::Go { .. }
             | Commands::GolangciLint { .. }
             | Commands::Gt { .. }
+            | Commands::Bun { .. }
+            | Commands::Bunx { .. }
     )
 }
 

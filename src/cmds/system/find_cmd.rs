@@ -5,6 +5,98 @@ use anyhow::{Context, Result};
 use ignore::WalkBuilder;
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
+
+
+/// Directories to always skip — large dependency/cache trees that waste time.
+const SKIP_DIRS: &[&str] = &[
+    "node_modules",
+    ".cache",
+    ".npm",
+    ".yarn",
+    ".pnpm-store",
+    ".cargo/registry",
+    ".cargo/git",
+    ".rustup",
+    "go/pkg",
+    ".local/share",
+    ".local/lib",
+    "Library",
+    ".Trash",
+    ".docker",
+    ".gradle",
+    ".m2",
+    ".venv",
+    ".tox",
+    ".nox",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "__pycache__",
+    ".git/objects",
+    ".bundle",
+    "vendor/bundle",
+    ".terraform",
+    ".pulumi",
+    ".next",
+    ".nuxt",
+    "dist",
+    "build/intermediates",
+    ".angular",
+    ".svelte-kit",
+];
+
+/// Auto-cap depth for searches rooted at broad paths like $HOME or /.
+fn auto_max_depth(path: &str, explicit_depth: Option<usize>) -> Option<usize> {
+    if explicit_depth.is_some() {
+        return explicit_depth;
+    }
+    let p = Path::new(path);
+    let depth = if p.is_absolute() {
+        p.components().count()
+    } else {
+        // Relative path — resolve against cwd without stat()
+        std::env::current_dir()
+            .map(|cwd| cwd.join(p).components().count())
+            .unwrap_or(10)
+    };
+    if depth <= 3 {
+        Some(8)
+    } else {
+        None
+    }
+}
+
+/// Single-component skip names — matched against the directory's own name (no allocation).
+const SKIP_NAMES: &[&str] = &[
+    "node_modules", ".cache", ".npm", ".yarn", ".pnpm-store", ".rustup",
+    ".Trash", ".docker", ".gradle", ".m2", ".venv", ".tox", ".nox",
+    ".mypy_cache", ".pytest_cache", ".ruff_cache", "__pycache__",
+    ".bundle", ".terraform", ".pulumi", ".next", ".nuxt",
+    ".angular", ".svelte-kit", "Library", "Applications",
+    ".lima", ".orbstack", ".colima",
+];
+
+fn should_skip_dir(entry_path: &Path, search_root: &Path) -> bool {
+    if let Some(name) = entry_path.file_name() {
+        let name = name.to_string_lossy();
+        for skip in SKIP_NAMES {
+            if name == *skip {
+                return true;
+            }
+        }
+    }
+    // Multi-component paths need prefix matching
+    if let Ok(rel) = entry_path.strip_prefix(search_root) {
+        let rel_str = rel.to_string_lossy();
+        for skip in SKIP_DIRS {
+            if skip.contains('/') && rel_str.starts_with(skip) {
+                return true;
+            }
+        }
+    }
+    false
+}
 
 /// Match a filename against a glob pattern (supports `*` and `?`).
 fn glob_match(pattern: &str, name: &str) -> bool {
@@ -214,64 +306,67 @@ pub fn run(
     // entries; otherwise skip them to keep results tidy (#1101).
     let search_hidden = effective_pattern.starts_with('.');
 
+    let search_root = Path::new(path);
+    let effective_depth = auto_max_depth(path, max_depth);
+
     let mut builder = WalkBuilder::new(path);
     builder
-        .hidden(!search_hidden) // skip hidden files/dirs unless pattern targets dotfiles
-        .git_ignore(true) // respect .gitignore
+        .hidden(!search_hidden)
+        .git_ignore(true)
         .git_global(true)
-        .git_exclude(true);
-    if let Some(depth) = max_depth {
+        .git_exclude(true)
+        .threads(std::cmp::min(num_cpus(), 6));
+    if let Some(depth) = effective_depth {
         builder.max_depth(Some(depth));
     }
-    let walker = builder.build();
 
-    let mut files: Vec<String> = Vec::new();
+    let collect_limit = max_results * 4;
+    let pattern_owned = effective_pattern.to_string();
+    let pattern_lower = if case_insensitive {
+        Some(effective_pattern.to_lowercase())
+    } else {
+        None
+    };
 
-    for entry in walker {
-        let entry = match entry {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
+    let files = Arc::new(Mutex::new(Vec::with_capacity(collect_limit)));
+    let done = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
-        let ft = entry.file_type();
-        let is_dir = ft.as_ref().is_some_and(|t| t.is_dir());
+    builder.build_parallel().run(|| {
+        let files = Arc::clone(&files);
+        let done = Arc::clone(&done);
+        let pat = pattern_owned.clone();
+        let pat_lower = pattern_lower.clone();
+        let root = search_root.to_path_buf();
 
-        // Filter by type
-        if want_dirs && !is_dir {
-            continue;
-        }
-        if !want_dirs && is_dir {
-            continue;
-        }
+        Box::new(move |entry| {
+            if done.load(std::sync::atomic::Ordering::Relaxed) {
+                return ignore::WalkState::Quit;
+            }
+            let entry = match entry {
+                Ok(e) => e,
+                Err(_) => return ignore::WalkState::Continue,
+            };
+            let entry_path = entry.path();
+            if entry_path.is_dir() && should_skip_dir(entry_path, &root) {
+                return ignore::WalkState::Skip;
+            }
+            if !matches_entry(entry_path, want_dirs, &pat, pat_lower.as_deref()) {
+                return ignore::WalkState::Continue;
+            }
+            let display = rel_display(entry_path, &root);
+            if !display.is_empty() {
+                let mut f = files.lock().unwrap();
+                f.push(display);
+                if f.len() >= collect_limit {
+                    done.store(true, std::sync::atomic::Ordering::Relaxed);
+                    return ignore::WalkState::Quit;
+                }
+            }
+            ignore::WalkState::Continue
+        })
+    });
 
-        let entry_path = entry.path();
-
-        // Get filename for glob matching
-        let name = match entry_path.file_name() {
-            Some(n) => n.to_string_lossy(),
-            None => continue,
-        };
-
-        let matches = if case_insensitive {
-            glob_match(&effective_pattern.to_lowercase(), &name.to_lowercase())
-        } else {
-            glob_match(effective_pattern, &name)
-        };
-        if !matches {
-            continue;
-        }
-
-        // Store path relative to search root
-        let display_path = entry_path
-            .strip_prefix(path)
-            .unwrap_or(entry_path)
-            .to_string_lossy()
-            .to_string();
-
-        if !display_path.is_empty() {
-            files.push(display_path);
-        }
-    }
+    let mut files = Arc::try_unwrap(files).unwrap().into_inner().unwrap();
 
     files.sort();
 
@@ -382,6 +477,40 @@ pub fn run(
     );
 
     Ok(())
+}
+
+
+fn matches_entry(entry_path: &Path, want_dirs: bool, pattern: &str, pattern_lower: Option<&str>) -> bool {
+    let is_dir = entry_path.is_dir();
+    if want_dirs && !is_dir {
+        return false;
+    }
+    if !want_dirs && is_dir {
+        return false;
+    }
+    let name = match entry_path.file_name() {
+        Some(n) => n.to_string_lossy(),
+        None => return false,
+    };
+    if let Some(pat_lower) = pattern_lower {
+        glob_match(pat_lower, &name.to_lowercase())
+    } else {
+        glob_match(pattern, &name)
+    }
+}
+
+fn rel_display(entry_path: &Path, search_root: &Path) -> String {
+    entry_path
+        .strip_prefix(search_root)
+        .unwrap_or(entry_path)
+        .to_string_lossy()
+        .to_string()
+}
+
+fn num_cpus() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
 }
 
 #[cfg(test)]
