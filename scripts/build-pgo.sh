@@ -22,7 +22,22 @@ if ! command -v cargo-pgo > /dev/null; then
   echo "  installing cargo-pgo ..."
   cargo install cargo-pgo
 fi
-rustup component add llvm-tools-preview
+
+# llvm-profdata discovery:
+#  - rustup toolchains: shipped via `rustup component add llvm-tools-preview`
+#  - Homebrew rust: no rustup; use Homebrew's llvm@21 instead
+if command -v rustup > /dev/null; then
+  rustup component add llvm-tools-preview
+elif [[ -x "/opt/homebrew/opt/llvm@21/bin/llvm-profdata" ]]; then
+  export PATH="/opt/homebrew/opt/llvm@21/bin:$PATH"
+elif [[ -x "/opt/homebrew/opt/llvm/bin/llvm-profdata" ]]; then
+  export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
+elif ! command -v llvm-profdata > /dev/null; then
+  echo "build-pgo: llvm-profdata not found. Install with one of:" >&2
+  echo "  - rustup component add llvm-tools-preview (if using rustup)" >&2
+  echo "  - brew install llvm (on macOS Homebrew)" >&2
+  exit 2
+fi
 
 TARGET_TRIPLE="$(rustc -vV | sed -n 's|host: ||p')"
 PROFILE=release-pgo

@@ -36,6 +36,22 @@ cargo run -- <command>        # run directly
 cargo install --path .        # install locally
 ```
 
+### Optimized Builds (local dev)
+
+For benchmarking or a faster personal install, use the optimized profiles
+(see `docs/superpowers/specs/2026-04-21-rtk-pgo-optimized-build-design.md`):
+
+```bash
+make release-native   # cargo install --profile release-native (target-cpu=native, no PGO)
+make release-pgo      # full PGO pipeline -> target/release/rtk-pgo
+make bench-pgo        # hyperfine baseline vs PGO binary
+```
+
+- `cargo build --release` is unchanged and remains the portable profile used by
+  `cargo deb` / `cargo generate-rpm` — do not add `target-cpu=native` to it.
+- `release-pgo` requires `cargo-pgo` (auto-installed on first run) and the
+  `llvm-tools-preview` rustup component (also auto-added).
+
 ### Testing
 ```bash
 cargo test                    # all tests
