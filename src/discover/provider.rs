@@ -137,8 +137,11 @@ impl SessionProvider for ClaudeProvider {
 
         // First pass: collect all tool_use Bash commands with their IDs and sequence
         // Second pass (same loop): collect tool_result output lengths, content, and error status
+        // Also collect RTK hook rewrites from PreToolUse:Bash hook_success attachment entries.
         let mut pending_tool_uses: Vec<(String, String, usize)> = Vec::new(); // (tool_use_id, command, sequence)
         let mut tool_results: HashMap<String, (usize, String, bool)> = HashMap::new(); // (len, content, is_error)
+                                                                                       // Maps tool_use_id → rewritten command when the RTK PreToolUse hook fired.
+        let mut hook_rewrites: HashMap<String, String> = HashMap::new();
         let mut commands = Vec::new();
         let mut sequence_counter = 0;
 
@@ -148,8 +151,12 @@ impl SessionProvider for ClaudeProvider {
                 Err(_) => continue,
             };
 
-            // Pre-filter: skip lines that can't contain Bash tool_use or tool_result
-            if !line.contains("\"Bash\"") && !line.contains("\"tool_result\"") {
+            // Pre-filter: skip lines that can't contain Bash tool_use, tool_result, or RTK hook_success.
+            // Note: hook_success lines contain "hook_success" but not "\"Bash\"" (they have "PreToolUse:Bash").
+            if !line.contains("\"Bash\"")
+                && !line.contains("\"tool_result\"")
+                && !line.contains("hook_success")
+            {
                 continue;
             }
 
@@ -217,19 +224,57 @@ impl SessionProvider for ClaudeProvider {
                         }
                     }
                 }
+                "attachment" => {
+                    // Detect RTK PreToolUse hook rewrites. Claude Code records the hook's
+                    // stdout in attachment entries *before* the tool runs. The session stores
+                    // Claude's original command in the assistant tool_use block, so without
+                    // this we'd mis-classify RTK-intercepted commands as "missed savings".
+                    if let Some(att) = entry.get("attachment") {
+                        if att.get("type").and_then(|t| t.as_str()) == Some("hook_success")
+                            && att.get("hookName").and_then(|n| n.as_str())
+                                == Some("PreToolUse:Bash")
+                        {
+                            if let (Some(tool_use_id), Some(stdout)) = (
+                                att.get("toolUseID").and_then(|i| i.as_str()),
+                                att.get("stdout").and_then(|s| s.as_str()),
+                            ) {
+                                if let Ok(hook_out) =
+                                    serde_json::from_str::<serde_json::Value>(stdout)
+                                {
+                                    if let Some(rewritten) = hook_out
+                                        .pointer("/hookSpecificOutput/updatedInput/command")
+                                        .and_then(|c| c.as_str())
+                                    {
+                                        if rewritten.starts_with("rtk ") {
+                                            hook_rewrites.insert(
+                                                tool_use_id.to_string(),
+                                                rewritten.to_string(),
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 _ => {}
             }
         }
 
-        // Match tool_uses with their results
+        // Match tool_uses with their results, substituting RTK-rewritten commands so that
+        // discover counts them as already using RTK rather than "missed savings".
         for (tool_id, command, sequence_index) in pending_tool_uses {
+            // If RTK's PreToolUse hook rewrote this command, use the rewritten form.
+            // It starts with "rtk " and will be classified as Ignored → already_rtk.
+            let effective_command = hook_rewrites.get(&tool_id).cloned().unwrap_or(command);
+
             let (output_len, output_content, is_error) = tool_results
                 .get(&tool_id)
                 .map(|(len, content, err)| (Some(*len), Some(content.clone()), *err))
                 .unwrap_or((None, None, false));
 
             commands.push(ExtractedCommand {
-                command,
+                command: effective_command,
                 output_len,
                 session_id: session_id.clone(),
                 output_content,
@@ -392,5 +437,63 @@ mod tests {
         assert_eq!(cmds[0].command, "first");
         assert_eq!(cmds[1].command, "second");
         assert_eq!(cmds[2].command, "third");
+    }
+
+    /// RTK's PreToolUse hook rewrites commands (e.g. `git add` → `rtk git add`) but the
+    /// session records Claude's *original* command in the assistant tool_use block.
+    /// The hook outcome is stored in a separate `type:"attachment"` / `hook_success` entry.
+    /// Verify that extract_commands substitutes the rewritten command so that discover
+    /// counts it as already using RTK rather than flagging it as "missed savings".
+    #[test]
+    fn test_hook_success_rewrite_substituted() {
+        let hook_stdout = r#"{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"RTK auto-rewrite\",\"updatedInput\":{\"command\":\"rtk git add .\"}}}"#;
+        let hook_entry = format!(
+            r#"{{"type":"attachment","isSidechain":false,"attachment":{{"type":"hook_success","hookName":"PreToolUse:Bash","toolUseID":"toolu_rtk1","hookEvent":"PreToolUse","content":"","stdout":"{hook_stdout}","stderr":"","exitCode":0,"command":"/home/user/.claude/hooks/rtk-rewrite.sh","durationMs":80}}}}"#,
+        );
+        let jsonl = make_jsonl(&[
+            r#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_rtk1","name":"Bash","input":{"command":"git add ."}}]}}"#,
+            &hook_entry,
+            r#"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_rtk1","content":""}]}}"#,
+        ]);
+
+        let provider = ClaudeProvider;
+        let cmds = provider.extract_commands(jsonl.path()).unwrap();
+        assert_eq!(cmds.len(), 1);
+        // The rewritten command must be returned so classify_command sees "rtk git add ."
+        // and counts it as already_rtk instead of a missed saving.
+        assert_eq!(cmds[0].command, "rtk git add .");
+    }
+
+    /// A command with no matching hook_success entry (hook not installed or passthrough)
+    /// must still return the original command unchanged.
+    #[test]
+    fn test_no_hook_rewrite_uses_original() {
+        let jsonl = make_jsonl(&[
+            r#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_nohook","name":"Bash","input":{"command":"git add ."}}]}}"#,
+            r#"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_nohook","content":""}]}}"#,
+        ]);
+
+        let provider = ClaudeProvider;
+        let cmds = provider.extract_commands(jsonl.path()).unwrap();
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].command, "git add .");
+    }
+
+    /// When RTK hook ran but didn't rewrite (command already starts with `rtk`), the hook
+    /// exits without stdout, so no hook_success updatedInput is present. The original
+    /// command (already `rtk …`) should be returned as-is.
+    #[test]
+    fn test_hook_success_no_rewrite_passthrough() {
+        let hook_entry = r#"{"type":"attachment","isSidechain":false,"attachment":{"type":"hook_success","hookName":"PreToolUse:Bash","toolUseID":"toolu_already","hookEvent":"PreToolUse","content":"","stdout":"","stderr":"","exitCode":0,"command":"/home/user/.claude/hooks/rtk-rewrite.sh","durationMs":12}}"#;
+        let jsonl = make_jsonl(&[
+            r#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_already","name":"Bash","input":{"command":"rtk git add ."}}]}}"#,
+            hook_entry,
+            r#"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_already","content":""}]}}"#,
+        ]);
+
+        let provider = ClaudeProvider;
+        let cmds = provider.extract_commands(jsonl.path()).unwrap();
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].command, "rtk git add .");
     }
 }

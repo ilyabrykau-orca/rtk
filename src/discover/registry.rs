@@ -745,9 +745,14 @@ fn rewrite_segment_inner(seg: &str, excluded: &[ExcludePattern], depth: usize) -
         }
     }
 
+    // Normalize absolute binary paths for rewrite matching:
+    // /opt/homebrew/bin/python3 → python3 (mirrors classify_command behavior, #485)
+    let cmd_normalized = strip_absolute_path(cmd_clean);
+    let cmd_for_match = cmd_normalized.as_str();
+
     // Try each rewrite prefix (longest first) with word-boundary check
     for &prefix in rule.rewrite_prefixes {
-        if let Some(rest) = strip_word_prefix(cmd_clean, prefix) {
+        if let Some(rest) = strip_word_prefix(cmd_for_match, prefix) {
             let rewritten = if rest.is_empty() {
                 format!("{}{}{}", env_prefix, rule.rtk_cmd, redirect_suffix)
             } else {
@@ -3089,6 +3094,35 @@ mod tests {
         assert_eq!(strip_absolute_path("/bin/ls -la"), "ls -la");
         assert_eq!(strip_absolute_path("grep -rn foo"), "grep -rn foo");
         assert_eq!(strip_absolute_path("/usr/local/bin/git"), "git");
+    }
+
+    #[test]
+    fn test_rewrite_absolute_path_commands() {
+        let e: Vec<String> = vec![];
+        assert_eq!(
+            rewrite_command("/opt/homebrew/bin/python3 script.py", &e),
+            Some("rtk python script.py".into())
+        );
+        assert_eq!(
+            rewrite_command("/usr/bin/grep -rn pattern .", &e),
+            Some("rtk grep -rn pattern .".into())
+        );
+        assert_eq!(
+            rewrite_command("/usr/bin/git status", &e),
+            Some("rtk git status".into())
+        );
+        assert_eq!(
+            rewrite_command("/bin/ls -la", &e),
+            Some("rtk ls -la".into())
+        );
+        assert_eq!(
+            rewrite_command("/usr/bin/find / -name foo", &e),
+            Some("rtk find / -name foo".into())
+        );
+        assert_eq!(
+            rewrite_command("/opt/homebrew/bin/cargo test", &e),
+            Some("rtk cargo test".into())
+        );
     }
 
     // --- #163: git global options ---
